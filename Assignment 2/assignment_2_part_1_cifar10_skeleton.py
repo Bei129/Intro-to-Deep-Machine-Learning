@@ -49,6 +49,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
+import matplotlib.pyplot as plt
 
 from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
@@ -59,6 +60,8 @@ from pathlib import Path
 batch_size = 128
 epochs = 10
 lr = 0.001
+optimizer_choice = "Adam"  # options: 'Adam', 'SGD', 'SGD+Momentum'
+momentum_value = 0.5  # only used if SGD+Momentum is chosen
 try_cuda = True
 seed = 1000
 
@@ -95,22 +98,32 @@ else:
 
 """# Step 2: Data Setup"""
 
-# downloading the cifar10 dataset
+# Downloading the CIFAR10 dataset
 
+transform = transforms.Compose(
+    [
+        transforms.Grayscale(num_output_channels=1),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5,), (0.5,)),
+    ]
+)
 
-transform=[insert-code: create transforms, will need to include turning data grayscale]
+train_dataset = datasets.CIFAR10(
+    root="./data", train=True, download=True, transform=transform
+)
+test_dataset = datasets.CIFAR10(
+    root="./data", train=False, download=True, transform=transform
+)
 
-train_dataset = [insert-code: download and transform cifar10 training data]
-test_dataset = [insert-code: download and transform cifar10 test data]
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
-train_loader = [insert-code: create train data loader]
-test_loader = [insert-code: create test data loader]
 
 def check_data_loader_dim(loader):
     # Checking the dataset
     for images, labels in loader:
-        print('Image batch dimensions:', images.shape)
-        print('Image label dimensions:', labels.shape)
+        print("Image batch dimensions:", images.shape)
+        print("Image label dimensions:", labels.shape)
         break
 
 check_data_loader_dim(train_loader)
@@ -118,18 +131,15 @@ check_data_loader_dim(test_loader)
 
 """# 3) Creating the Model"""
 
-layer_1_n_filters = [insert-code]
-layer_2_n_filters = [insert-code]
-fc_1_n_nodes = [insert-code]
-padding="same"
+layer_1_n_filters = 32
+layer_2_n_filters = 64
+fc_1_n_nodes = 1024
+padding = "same"
 kernel_size = 5
 verbose = False
 
-# calculating the side length of the final activation maps
-final_length = [insert-code: calculate the dimension of the output of the \
-            CNN stage before the MLP layers given the previous 2 convolutional layers \
-                with the current padding setting, kernel size and maxpooling
-            ]
+# Calculate the side length of the final activation maps
+final_length = 8
 
 if verbose:
     print(f"final_length = {final_length}")
@@ -149,30 +159,46 @@ class LeNet5(nn.Module):
             in_channels = 3
 
         self.features = nn.Sequential(
-
-            [insert-code]
+            nn.Conv2d(in_channels, layer_1_n_filters, kernel_size=5, padding=2),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Conv2d(layer_1_n_filters, layer_2_n_filters, kernel_size=5, padding=2),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),
         )
 
         self.classifier = nn.Sequential(
-            nn.Linear(final_length*final_length*layer_2_n_filters*in_channels, fc_1_n_nodes),
+            nn.Linear(
+                final_length * final_length * layer_2_n_filters * in_channels,
+                fc_1_n_nodes,
+            ),
             nn.Tanh(),
-            nn.Linear(fc_1_n_nodes, num_classes)
+            nn.Linear(fc_1_n_nodes, num_classes),
         )
 
 
     def forward(self, x):
-        x = [insert-code: send input through convolutional layers]
-        x = [insert-code: send input through MLP layers]
+        x = self.features(x)
+        x = x.view(x.size(0), -1)
         logits = self.classifier(x)
         probas = F.softmax(logits, dim=1)
         return logits, probas
 
-model = [insert-code]
+
+model = LeNet5(num_classes=num_classes, grayscale=grayscale)
 
 if cuda:
     model.cuda()
 
-optimizer = [insert-code: USE AN ADAM OPTIMIZER]
+# Set optimizer
+if optimizer_choice == "Adam":
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+elif optimizer_choice == "SGD":
+    optimizer = optim.SGD(model.parameters(), lr=lr)
+elif optimizer_choice == "SGD+Momentum":
+    optimizer = optim.SGD(model.parameters(), lr=lr, momentum=momentum_value)
+else:
+    raise ValueError(f"Unknown optimizer choice: {optimizer_choice}")
 
 """# Step 4: Train/Test Loop"""
 
@@ -180,34 +206,93 @@ optimizer = [insert-code: USE AN ADAM OPTIMIZER]
 
 def train(epoch):
     model.train()
-
     criterion = nn.CrossEntropyLoss()
+    correct = 0
+    total = 0
+    running_loss = 0
     for batch_idx, (data, target) in enumerate(train_loader):
-        [insert-code: move data to GPU]
+        if cuda:
+            data, target = data.cuda(), target.cuda()
 
         optimizer.zero_grad()
-        logits,probas = model(data) # forward
-        
-        [insert-code: finish training loop and logging metrics]
+        logits, probas = model(data)
+        loss = criterion(logits, target)
+        loss.backward()
+        optimizer.step()
 
-    # 
-    [insert-code: Log model parameters to TensorBoard at every epoch]
+        running_loss += loss.item()
+        pred = probas.argmax(dim=1)
+        correct += pred.eq(target).sum().item()
+        total += target.size(0)
+
+    # Calculate and log average training loss and accuracy for the epoch
+    train_loss = running_loss / len(train_loader)
+    train_accuracy = 100.0 * correct / total
+    print(
+        f"Epoch {epoch}: Training Loss: {train_loss:.4f}, Training Accuracy: {train_accuracy:.2f}%"
+    )
+    writer.add_scalar("Training Loss", train_loss, epoch)
+    writer.add_scalar("Training Accuracy", train_accuracy, epoch)
+
 
 def test(epoch):
     model.eval()
     test_loss = 0
     correct = 0
-    criterion = nn.CrossEntropyLoss(size_average = False)
-    for data, target in test_loader:
-        [insert-code: move data to GPU]
+    criterion = nn.CrossEntropyLoss(reduction="sum")
+    with torch.no_grad():
+        for data, target in test_loader:
+            if cuda:
+                data, target = data.cuda(), target.cuda()
+            logits, probas = model(data)
+            test_loss += criterion(logits, target).item()
+            pred = probas.argmax(dim=1)
+            correct += pred.eq(target).sum().item()
 
-        logits,probas  = model(data)
-        
-        
-        [insert-code: finish testing loop and logging metrics]
+    test_loss /= len(test_loader.dataset)
+    test_accuracy = 100.0 * correct / len(test_loader.dataset)
+    print(
+        f"Epoch {epoch}: Test Loss: {test_loss:.4f}, Test Accuracy: {test_accuracy:.2f}%"
+    )
+    writer.add_scalar("Test Loss", test_loss, epoch)
+    writer.add_scalar("Test Accuracy", test_accuracy, epoch)
 
 
-[insert-code: running test and training over epoch]
+for epoch in range(1, epochs + 1):
+    train(epoch)
+    test(epoch)
+
+
+# Visualize weights of the first convolutional layer
+def visualize_weights(layer):
+    weights = layer.weight.data.cpu().numpy()
+    fig, axs = plt.subplots(4, 8, figsize=(10, 5))
+    for i, ax in enumerate(axs.flatten()):
+        if i < weights.shape[0]:
+            ax.imshow(weights[i, 0, :, :], cmap="gray")
+        ax.axis("off")
+    plt.show()
+
+
+# Visualize activations of the convolutional layer
+def visualize_activations(data, model):
+    with torch.no_grad():
+        data = data.cuda() if cuda else data
+        activation = model.features[0](data)
+        activation = activation.cpu().numpy()
+
+        # Calculate statistics of activations
+        mean_activation = activation.mean()
+        var_activation = activation.var()
+
+        # Print activation statistics
+        print(f"Activation mean: {mean_activation}, variance: {var_activation}")
+
+# Select a batch of test data
+data, _ = next(iter(test_loader))
+visualize_weights(model.features[0])
+visualize_activations(data, model)
+
 
 writer.close()
 
