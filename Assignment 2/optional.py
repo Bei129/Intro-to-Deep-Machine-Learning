@@ -43,7 +43,6 @@ test_loader = DataLoader(test_dataset, batch_size=1, shuffle=True)
 sample_data, _ = next(iter(test_loader))
 sample_image = sample_data[0].unsqueeze(0)
 
-# Fix: Deconvolution Visualization Function
 def deconv_visualize_feature(data, model, layer_index=0, feature_index=0):
     model.eval()
     data = data.cuda() if torch.cuda.is_available() else data
@@ -99,6 +98,5 @@ def deconv_visualize_feature(data, model, layer_index=0, feature_index=0):
         plt.show()
 
 
-# Visualize deconvolution for the first few features
-for feature_index in range(4):  # Visualize a few feature maps
+for feature_index in range(4):
     deconv_visualize_feature(sample_image, model, layer_index=0, feature_index=feature_index)

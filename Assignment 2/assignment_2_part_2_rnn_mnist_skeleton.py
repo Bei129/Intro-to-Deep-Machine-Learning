@@ -52,8 +52,8 @@ logging_interval = 10 # how many batches to wait before logging
 logging_dir = None
 
 INPUT_SIZE = 28
-# hidden_size = 128      # 隐藏层的节点数
-num_classes = 10       # 类别数（0-9 数字）
+# hidden_size = 128 
+num_classes = 10
 
 # 1) setting up the logging
 
@@ -222,13 +222,12 @@ def test(epoch):
 #     print(f"Epoch {epoch} Complete: Train Loss = {train_loss:.4f}, Train Accuracy = {train_accuracy:.2f}%, Test Accuracy = {test_accuracy:.2f}%\n")
 
 # 3 b) different hidden_size
-hidden_sizes = [64, 128, 256, 512]  # 不同的隐藏层单元数
-results = {}  # 用于存储结果
+hidden_sizes = [64, 128, 256, 512]
+results = {}
 
 for hidden_size in hidden_sizes:
     print(f"\nTesting model with hidden size = {hidden_size}")
     
-    # 创建新的模型
     # model = Net(input_size=INPUT_SIZE, hidden_size=hidden_size, num_classes=num_classes, rnn_type='RNN')
     # model = Net(input_size=INPUT_SIZE, hidden_size=hidden_size, num_classes=num_classes, rnn_type='LSTM')
     model = Net(input_size=INPUT_SIZE, hidden_size=hidden_size, num_classes=num_classes, rnn_type='GRU')
@@ -237,8 +236,7 @@ for hidden_size in hidden_sizes:
         model.cuda()
     
     optimizer = optim.Adam(model.parameters(), lr=lr)
-    
-    # 存储每个 hidden_size 的训练和测试数据
+
     train_losses = []
     train_accuracies = []
     test_accuracies = []
@@ -255,14 +253,12 @@ for hidden_size in hidden_sizes:
         
         print(f"Epoch {epoch} Complete: Train Loss = {train_loss:.4f}, Train Accuracy = {train_accuracy:.2f}%, Test Accuracy = {test_accuracy:.2f}%\n")
     
-    # 存储结果
     results[hidden_size] = {
         "train_losses": train_losses,
         "train_accuracies": train_accuracies,
         "test_accuracies": test_accuracies
     }
 
-# 绘制每个 hidden_size 的准确率和损失曲线
 plt.figure(figsize=(12, 6))
 for hidden_size, result in results.items():
     plt.plot(result['test_accuracies'], label=f'Hidden Size {hidden_size}')
