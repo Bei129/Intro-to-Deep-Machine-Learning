@@ -45,13 +45,15 @@ import matplotlib.pyplot as plt
 batch_size = 64
 test_batch_size = 1000
 epochs = 10
-lr = 0.01
+lr = 0.001
 try_cuda = True
 seed = 1000
 logging_interval = 10 # how many batches to wait before logging
 logging_dir = None
 
 INPUT_SIZE = 28
+# hidden_size = 128      # 隐藏层的节点数
+num_classes = 10       # 类别数（0-9 数字）
 
 # 1) setting up the logging
 
@@ -79,48 +81,63 @@ else:
 """# Step 2: Data Setup"""
 
 # Setting up data
-transform=[insert-code: create transforms]
+transform = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Normalize((0.5,), (0.5,)),
+])
 
-train_dataset = [insert-code: download and transform cifar10 training data]
-test_dataset = [insert-code: download and transform cifar10 test data]
+train_dataset = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
+test_dataset = datasets.MNIST(root='./data', train=False, download=True, transform=transform)
 
-train_loader = [insert-code: create train data loader]
-test_loader = [insert-code: create test data loader]
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=test_batch_size, shuffle=False)
 
-# plot one example
-print(train_dataset.train_data.size())     # (60000, 28, 28)
-print(train_dataset.train_labels.size())   # (60000)
-plt.imshow(train_dataset.train_data[0].numpy(), cmap='gray')
-plt.title('%i' % train_dataset.train_labels[0])
-plt.show()
+# # plot one example
+# print(train_dataset.data.size())     # (60000, 28, 28)
+# print(train_dataset.targets.size())   # (60000)
+# plt.imshow(train_dataset.data[0].numpy(), cmap='gray')
+# plt.title('%i' % train_dataset.targets[0])
+# plt.show()
 
 """# Step 3: Creating the Model"""
 
 class Net(nn.Module):
-    def __init__(self):
+    def __init__(self, input_size, hidden_size, num_classes, rnn_type='RNN'):
         super(Net, self).__init__()
 
+        if rnn_type == 'RNN':
+            self.rnn = nn.RNN(input_size, hidden_size, batch_first=True)
+        elif rnn_type == 'LSTM':
+            self.rnn = nn.LSTM(input_size, hidden_size, batch_first=True)
+        elif rnn_type == 'GRU':
+            self.rnn = nn.GRU(input_size, hidden_size, batch_first=True)
+        else:
+            raise ValueError("Invalid rnn_type. Choose from 'RNN', 'LSTM', or 'GRU'.")
 
-        self.rnn = [insert_code]
-        self.out = [insert_code: create the linear layer]
+        self.out = nn.Linear(hidden_size, num_classes)
 
     def forward(self, x):
         # x shape (batch, time_step, input_size)
         # r_out shape (batch, time_step, output_size)
         # h_n shape (n_layers, batch, hidden_size)
         # h_c shape (n_layers, batch, hidden_size)
-        r_out, hidden = self.rnn(x, None)   # None represents zero initial hidden state
+        if isinstance(self.rnn, (nn.LSTM, nn.GRU)):
+            r_out, _ = self.rnn(x, None)  # For LSTM/GRU, hidden state is a tuple
+        else:
+            r_out, _ = self.rnn(x)  # For RNN, hidden state is not a tuple
 
         # choose r_out at the last time step
         out = self.out(r_out[:, -1, :])
         return out
 
-model = [insert-code]
+# model = Net(input_size=INPUT_SIZE, hidden_size=hidden_size, num_classes=num_classes, rnn_type='RNN')
+# model = Net(input_size=INPUT_SIZE, hidden_size=hidden_size, num_classes=num_classes, rnn_type='LSTM')
+# model = Net(input_size=INPUT_SIZE, hidden_size=hidden_size, num_classes=num_classes, rnn_type='GRU')
 
-if cuda:
-    model.cuda()
+# if cuda:
+#     model.cuda()
 
-optimizer = [insert-code: USE AN ADAM OPTIMIZER]
+# optimizer = optim.Adam(model.parameters(), lr=lr)
 
 """# Step 4: Train/Test"""
 
@@ -128,8 +145,10 @@ optimizer = [insert-code: USE AN ADAM OPTIMIZER]
 
 def train(epoch):
     model.train()
-
     criterion = nn.CrossEntropyLoss()
+    total_loss = 0
+    correct = 0
+
     for batch_idx, (data, target) in enumerate(train_loader):
         if cuda:
             data, target = data.cuda(), target.cuda()
@@ -139,17 +158,128 @@ def train(epoch):
         optimizer.zero_grad()
         output = model(data) # forward
         loss = criterion(output, target)
-        
-        [insert-code: implement training loop with logging]
+        loss.backward()
+        optimizer.step()
 
+        total_loss += loss.item()
+        pred = output.argmax(dim=1, keepdim=True)
+        correct += pred.eq(target.view_as(pred)).sum().item()
+
+        # # Log training metrics
+        # if batch_idx % logging_interval == 0:
+        #     print(f"Train Epoch: {epoch} [{batch_idx * len(data)}/{len(train_loader.dataset)}] "
+        #           f"Loss: {loss.item():.6f}")
+
+    avg_loss = total_loss / len(train_loader)
+    accuracy = 100. * correct / len(train_loader.dataset)
+    writer.add_scalar("Training Loss", avg_loss, epoch)
+    writer.add_scalar("Training Accuracy", accuracy, epoch)
+    print(f"Training set: Average loss: {avg_loss:.4f}, Accuracy: {correct}/{len(train_loader.dataset)} ({accuracy:.2f}%)")
+    return avg_loss, accuracy
 
 
 def test(epoch):
-    [insert-code: implement testing loop with logging]
+    model.eval()
+    criterion = nn.CrossEntropyLoss(reduction='sum')
+    test_loss = 0
+    correct = 0
+    with torch.no_grad():
+        for batch_idx, (data, target) in enumerate(test_loader):
+            if cuda:
+                data, target = data.cuda(), target.cuda()
 
-# Training loop
+            data = data.view(-1, 28, 28)
+            output = model(data)
+            test_loss += criterion(output, target).item()
+            pred = output.argmax(dim=1, keepdim=True)
+            correct += pred.eq(target.view_as(pred)).sum().item()
 
-[insert-code: running test and training over epoch]
+            # if batch_idx % logging_interval == 0:
+            #     print(f"Test Epoch: {epoch} [{batch_idx * len(data)}/{len(test_loader.dataset)}] "
+            #           f"Batch Loss: {test_loss / ((batch_idx + 1) * len(data)):.6f}, Batch Accuracy: {100. * correct / ((batch_idx + 1) * len(data)):.2f}%")
+
+    test_loss /= len(test_loader.dataset)
+    accuracy = 100. * correct / len(test_loader.dataset)
+    print(f"Test set: Average loss: {test_loss:.4f}, Accuracy: {correct}/{len(test_loader.dataset)} ({accuracy:.0f}%)")
+    writer.add_scalar('Test Loss', test_loss, epoch)
+    writer.add_scalar('Test Accuracy', accuracy, epoch)
+    return accuracy
+
+
+# train_losses = []
+# train_accuracies = []
+# test_accuracies = []
+
+# # Training loop
+# for epoch in range(1, epochs + 1):
+#     print(f"Starting Epoch {epoch}/{epochs}")
+#     train_loss, train_accuracy = train(epoch)
+#     test_accuracy = test(epoch)
+    
+#     train_losses.append(train_loss)
+#     train_accuracies.append(train_accuracy)
+#     test_accuracies.append(test_accuracy)
+#     print(f"Epoch {epoch} Complete: Train Loss = {train_loss:.4f}, Train Accuracy = {train_accuracy:.2f}%, Test Accuracy = {test_accuracy:.2f}%\n")
+
+# 3 b) different hidden_size
+hidden_sizes = [64, 128, 256, 512]  # 不同的隐藏层单元数
+results = {}  # 用于存储结果
+
+for hidden_size in hidden_sizes:
+    print(f"\nTesting model with hidden size = {hidden_size}")
+    
+    # 创建新的模型
+    # model = Net(input_size=INPUT_SIZE, hidden_size=hidden_size, num_classes=num_classes, rnn_type='RNN')
+    # model = Net(input_size=INPUT_SIZE, hidden_size=hidden_size, num_classes=num_classes, rnn_type='LSTM')
+    model = Net(input_size=INPUT_SIZE, hidden_size=hidden_size, num_classes=num_classes, rnn_type='GRU')
+    
+    if cuda:
+        model.cuda()
+    
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    
+    # 存储每个 hidden_size 的训练和测试数据
+    train_losses = []
+    train_accuracies = []
+    test_accuracies = []
+    
+    # Training loop
+    for epoch in range(1, epochs + 1):
+        print(f"Starting Epoch {epoch}/{epochs} with hidden size {hidden_size}")
+        train_loss, train_accuracy = train(epoch)
+        test_accuracy = test(epoch)
+        
+        train_losses.append(train_loss)
+        train_accuracies.append(train_accuracy)
+        test_accuracies.append(test_accuracy)
+        
+        print(f"Epoch {epoch} Complete: Train Loss = {train_loss:.4f}, Train Accuracy = {train_accuracy:.2f}%, Test Accuracy = {test_accuracy:.2f}%\n")
+    
+    # 存储结果
+    results[hidden_size] = {
+        "train_losses": train_losses,
+        "train_accuracies": train_accuracies,
+        "test_accuracies": test_accuracies
+    }
+
+# 绘制每个 hidden_size 的准确率和损失曲线
+plt.figure(figsize=(12, 6))
+for hidden_size, result in results.items():
+    plt.plot(result['test_accuracies'], label=f'Hidden Size {hidden_size}')
+plt.xlabel('Epoch')
+plt.ylabel('Test Accuracy')
+plt.legend()
+plt.show()
+
+plt.figure(figsize=(12, 6))
+for hidden_size, result in results.items():
+    plt.plot(result['train_losses'], label=f'Hidden Size {hidden_size}')
+plt.xlabel('Epoch')
+plt.ylabel('Train Loss')
+plt.legend()
+plt.show()
+
+
 writer.close()
 
 # Commented out IPython magic to ensure Python compatibility.
