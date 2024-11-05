@@ -4,6 +4,25 @@
 **Lingyi Xu (lx28@rice.edu)**
 **Nov 5th, 2024**
 
+## Table of Contents
+- [COMP 576 Assignment 2](#comp-576-assignment-2)
+  - [Table of Contents](#table-of-contents)
+  - [1. Visualizing a CNN with CIFAR10](#1-visualizing-a-cnn-with-cifar10)
+    - [1. b) Train LeNet5 on CIFAR10](#1-b-train-lenet5-on-cifar10)
+    - [1. c) Visualize the Trained Network](#1-c-visualize-the-trained-network)
+  - [2. Visualizing and Understanding Convolutional Networks](#2-visualizing-and-understanding-convolutional-networks)
+    - [Summarize the key ideas of the paper](#summarize-the-key-ideas-of-the-paper)
+    - [(Optional) Visualization of features in a fully trained model](#optional-visualization-of-features-in-a-fully-trained-model)
+  - [3. Build and Train an RNN on MNIST](#3-build-and-train-an-rnn-on-mnist)
+    - [3. a) Setup an RNN](#3-a-setup-an-rnn)
+    - [3. b) How about using an LSTM or GRU](#3-b-how-about-using-an-lstm-or-gru)
+      - [LSTM Results:](#lstm-results)
+      - [GRU Results:](#gru-results)
+      - [Accuracy Comparison:](#accuracy-comparison)
+      - [Loss Comparison:](#loss-comparison)
+      - [Change the number of hidden units](#change-the-number-of-hidden-units)
+    - [3. c) Compare against the CNN](#3-c-compare-against-the-cnn)
+
 
 ## 1. Visualizing a CNN with CIFAR10
 
@@ -58,7 +77,72 @@ Activation mean: -0.07476064562797546, variance: 0.03350016847252846
 ```
 The mean value is close to 0, which indicates that the activations in the convolutional layer are relatively balanced. This distribution is typical and beneficial as it helps prevent gradient vanishing or exploding during training. The variance of 0.0335 indicates that the activations are spread within a narrow range, suggesting that the layer's responses to inputs have stabilized after training.
 
-### 2. Visualizing and Understanding Convolutional Networks
+## 2. Visualizing and Understanding Convolutional Networks
+
+### Summarize the key ideas of the paper
+
+The paper _Visualizing and Understanding Convolutional Networks by Matthew D. Zeiler and Rob Fergus_'s core goal is to help us understand how Convolutional Neural Networks (CNNs) function internally and to improve these models through this understanding. CNNs have achieved impressive performance on image classification tasks, especially on large datasets like ImageNet, but their inner workings are complex, and it's hard to understand how exactly they operate. This paper introduces an innovative visualization technique that reveals how features are activated in different layers of CNNs, helping us design and optimize models more effectively.
+
+**Visualization Technique**
+The paper introduces a technique called Deconvolutional Network (DeconvNet), which maps activations within a CNN back to the input image. In other words, when a specific feature in a certain layer is activated, this technique “traces back” to the input pattern that caused this activation. This method allows us to visualize the features learned in each layer and observe how these features evolve during training, revealing the hierarchical structure of features inside CNNs.
+
+**Hierarchical Feature Learning**
+Each layer in a CNN learns features of increasing complexity, forming a hierarchical structure. The lower layers detect simple edges and color patterns, the middle layers capture textures and shapes, and the higher layers represent high-level, class-specific features like parts of an object (such as a face or an eye of a dog). This hierarchy explains why CNNs are effective: they can progressively capture more meaningful and complex features.
+
+**Improving Architecture**
+By examining the visualizations of CNNs, the researchers identified some issues, such as missing low-frequency features and “aliasing effects” in certain layers. By reducing the filter size in the first layer (from 11x11 to 7x7) and lowering the stride (from 4 to 2), they significantly improved the model's feature representation and classification performance. This demonstrates that visualization is not only a tool for understanding models but also for optimizing architectures to enhance performance.
+
+**Analyzing with Occlusion Experiments**
+The researchers conducted occlusion experiments, systematically covering parts of input images to see if the model was truly focusing on the object itself rather than relying on background or other context. The results showed that the model’s accuracy dropped significantly when key parts of the object were obscured, indicating that it genuinely focuses on the local structure of the object and not just on scene context.
+
+**Model Depth and Transfer Learning**
+In studying the contribution of each layer, the authors also conducted an Ablation Study by removing or adjusting specific layers to analyze their impact on performance. Results showed that depth is crucial to CNNs—deeper networks are better at capturing complex features, ultimately leading to better performance. Additionally, they tested this ImageNet-trained model on other datasets (such as Caltech-101 and Caltech-256) and found that its features generalized well, demonstrating that CNNs can reuse features across tasks, making them well-suited for transfer learning.
+
+In conclusion, the paper shows that visualization techniques help us understand and debug models, pointing to potential areas of improvement. The progressive abstraction of features in different layers allows CNNs to recognize complex objects by starting from simple edges, which can contribute to the development of CNN architectures and help future models to learn and transfer useful features more effectively. 
+
+### (Optional) Visualization of features in a fully trained model
+
+Apply the DeconvNet technique to visualize features learned in the first convolutional layer of our CNN model trained on the CIFAR-10 dataset. For each feature, we examined:
+1. Activation Map: The response in a specific feature map when a test image is passed through the model.
+2. Deconvolution Output: The reconstructed input pattern that triggered these activations, allowing us to interpret what the feature represents.
+
+**Layer 0 - Feature 0**
+<p align="center">
+     <img src="./figures/2_layer0_feature0.png" alt="Layer 0 - Feature 0 Activation" style="width: 60%"/> 
+</p>
+<p align="center">
+    <img src="./figures/2_all_channels_l0f0.png" alt="Deconv Output - Layer 0 Feature 0"/> 
+</p>
+Feature 0 detects basic edges or gradients. The deconvolution output shows patterns in the input image that likely activate this feature map, which appear to correspond to areas with strong contrasts, typical of low-level edge detection.
+
+**Layer 0 - Feature 1**
+<p align="center">
+     <img src="./figures/2_layer0_feature1.png" alt="Layer 0 - Feature 1 Activation" style="width: 60%"/> 
+</p>
+<p align="center">
+    <img src="./figures/2_all_channels_l0f1.png" alt="Deconv Output - Layer 0 Feature 1"/> 
+</p>
+Feature 1 seems to capture another set of edge structures, possibly oriented differently than Feature 0. The deconvolution output highlights specific regions in the input where this feature map activates, focusing on line or texture patterns.
+
+**Layer 0 - Feature 2**
+<p align="center">
+     <img src="./figures/2_layer0_feature2.png" alt="Layer 0 - Feature 2 Activation" style="width: 60%"/> 
+</p>
+<p align="center">
+    <img src="./figures/2_all_channels_l0f2.png" alt="Deconv Output - Layer 0 Feature 2"/> 
+</p>
+Feature 2 reveals more complex textures or intersections in patterns, captures slightly more complex spatial relationships compared to Features 0 and 1.
+
+**Layer 0 - Feature 3**
+<p align="center">
+     <img src="./figures/2_layer0_feature3.png" alt="Layer 0 - Feature 3 Activation" style="width: 60%"/> 
+</p>
+<p align="center">
+    <img src="./figures/2_all_channels_l0f3.png" alt="Deconv Output - Layer 0 Feature 3"/> 
+</p>
+Feature 3 appears to detect further nuanced patterns, possibly related to textures or repetitive structures. 
+
+These visualizations show that the first convolutional layer focuses on capturing basic edge patterns and textures. Each feature map has a unique role, detecting various orientations, textures, and patterns that contribute to the model’s understanding of image content. 
 
 
 ## 3. Build and Train an RNN on MNIST
@@ -336,7 +420,7 @@ Compare with training using convnet in assignment 1:
 - **CNN**: CNNs demonstrate stable training on image data, avoiding issues such as vanishing or exploding gradients, thanks to the local receptive fields of convolutional and pooling layers.
 - **RNN**: RNNs may face stability challenges, especially on longer sequences, due to issues like vanishing or exploding gradients. However, in this experiment, with an optimized learning rate, the RNN achieved stable training and avoided major gradient issues.
 
-In conclusion, although CNNs have an inherent advantage in spatial feature extraction for image classification tasks like MNIST, the RNN—with optimized parameters—achieved competitive performance, converging effectively and reaching a high accuracy. This highlights the flexibility of RNNs when properly tuned, though CNNs still maintain an edge in handling image data due to their ability to naturally capture spatial structures.
+In conclusion, although CNNs have an inherent advantage in spatial feature extraction for image classification tasks like MNIST, the RNN with optimized parameters achieved competitive performance, converging effectively and reaching a high accuracy. This highlights the flexibility of RNNs when properly tuned, though CNNs still maintain an edge in handling image data due to their ability to naturally capture spatial structures.
 
 <!-- # hiddent test
 RNN:
